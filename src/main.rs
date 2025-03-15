@@ -61,20 +61,30 @@ fn create_db() {
     }
 }
 
+fn get_db() -> Result<Database, std::io::Error> {
+    let db_json = fs::read_to_string("db.json")?;
+    let db: Database = serde_json::from_str(&db_json)?;
+    Ok(db)
+}
+
+fn write_db(db: &Database) -> Result<&str, std::io::Error> {
+    let new_db_json = serde_json::to_string_pretty(db)?;
+    fs::write("db.json", new_db_json)?;
+    Ok("Write db success!")
+}
+
 fn add<'a>(desc: &String) -> Result<&'a str, std::io::Error> {
     if !is_db_exists() {
         create_db();
     }
 
-    let db_json = fs::read_to_string("db.json")?;
-    let mut db: Database = serde_json::from_str(&db_json)?;
+    let mut db = get_db()?;
     let item = Item { done: false, desc: desc.to_owned(), id: db.current_id + 1 };
 
     db.items.push(item);
     db.current_id += 1;
 
-    let new_db_json = serde_json::to_string_pretty(&db)?;
-    fs::write("db.json", new_db_json)?;
+    write_db(&db)?;
 
     Ok("Success")
 }
