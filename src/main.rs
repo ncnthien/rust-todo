@@ -50,7 +50,7 @@ fn create_db() {
 
     if let Ok(mut file) = create_file_result {
         let db = json!({
-            "current_id": 1,
+            "current_id": 0,
             "items": []
         });
 
@@ -89,6 +89,22 @@ fn add<'a>(desc: &String) -> Result<&'a str, std::io::Error> {
     Ok("Success")
 }
 
+fn list() -> () {
+    if !is_db_exists() {
+        create_db();
+    }
+
+    let db = get_db().unwrap_or_else(|error| {
+        eprintln!("Issue found: {}", error);
+        process::exit(1);
+    });
+
+    for item in db.items {
+        let mark = if item.done { "x" } else { " " };
+        println!("[{}] {} - {}", mark, item.id, item.desc);
+    }
+}
+
 fn main() {
     let cli = Cli::parse();
 
@@ -108,7 +124,7 @@ fn main() {
             println!("done");
         },
         Command::List => {
-            println!("list");
+            list();
         }
     };
 }
