@@ -4,6 +4,7 @@ use std::fs;
 use serde::{Serialize, Deserialize};
 use std::io::Write;
 use serde_json::json;
+use std::path::Path;
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -35,33 +36,45 @@ struct Item {
 }
 
 #[derive(Serialize, Deserialize)]
-struct Db {
+struct Database {
     current_id: i8,
     items: Vec<Item>
 }
 
-fn get_db_file() -> fs::File {
-    fs::File::open("db.json").unwrap_or_else(|_| {
-        let create_file_result = fs::File::create("db.json");
-
-        if let Ok(file) = create_file_result {
-            file
-        } else {
-            eprintln!("Cannot create db.json file");
-            process::exit(1);
-        }
-    })
+fn is_db_exists() -> bool {
+    Path::new("db.json").exists()
 }
 
-fn add<'a>(desc: &String) -> Result<&'a str, String> {
-    let item = Item { done: false, desc: desc.to_owned(), id: 1 };
-    let item_json = serde_json::to_string(&item).unwrap_or_else(|err| {
-        eprint!("Something went wrong on 'serde_json::to_string' with {{:?item}}!\nError: {err}");
+fn create_db() {
+    let create_file_result = fs::File::create("db.json");
+
+    if let Ok(mut file) = create_file_result {
+        let db = json!({
+            "current_id": 1,
+            "items": []
+        });
+
+        file.write_all(db.to_string().as_bytes()).expect("Cannot write data to db.json for the first time");
+    } else {
+        eprintln!("Cannot create db.json file");
         process::exit(1);
-    });
+    }
+}
 
-    let db_file = get_db_file();
+fn add<'a>(desc: &String) -> Result<&'a str, std::io::Error> {
+    if !is_db_exists() {
+        create_db();
+    }
 
+    let db_json = fs::read_to_string("db.json")?;
+    let mut db: Database = serde_json::from_str(&db_json)?;
+    let item = Item { done: false, desc: desc.to_owned(), id: db.current_id + 1 };
+
+    db.items.push(item);
+    db.current_id += 1;
+
+    let new_db_json = serde_json::to_string_pretty(&db)?;
+    fs::write("db.json", new_db_json)?;
 
     Ok("Success")
 }
@@ -71,7 +84,11 @@ fn main() {
 
     match &cli.command {
         Command::Add { description } => {
-            add(description);
+            let message = add(description).unwrap_or_else(|err| {
+                eprintln!("Error found: {err}");
+                process::exit(1);
+            });
+            println!("{}", message);
             ()
         },
         Command::Remove { id } => {

@@ -1,1 +1,15 @@
-{ current_id: 1, items: [] }
+{
+  "current_id": 3,
+  "items": [
+    {
+      "id": 2,
+      "done": false,
+      "desc": "dog walking"
+    },
+    {
+      "id": 3,
+      "done": false,
+      "desc": "taking a shower"
+    }
+  ]
+}
