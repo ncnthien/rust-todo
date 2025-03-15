@@ -22,7 +22,7 @@ enum Command {
         id: i8
     },
     Done {
-        id: usize
+        id: i8
     },
     List
 }
@@ -45,64 +45,91 @@ fn is_db_exists() -> bool {
     Path::new("db.json").exists()
 }
 
-fn create_db() {
-    let create_file_result = fs::File::create("db.json");
+fn create_db<'a>() -> Result<(), &'a str> {
+    let Ok(mut file) = fs::File::create("db.json") else {
+        return Err("Cannot create db.json file")
+    };
 
-    if let Ok(mut file) = create_file_result {
-        let db = json!({
-            "current_id": 0,
-            "items": []
-        });
+    let db = json!({
+        "current_id": 0,
+        "items": []
+    });
 
-        file.write_all(db.to_string().as_bytes()).expect("Cannot write data to db.json for the first time");
-    } else {
-        eprintln!("Cannot create db.json file");
-        process::exit(1);
-    }
+    let _ = file.write_all(db.to_string().as_bytes()); 
+
+    Ok(())
 }
 
-fn get_db() -> Result<Database, std::io::Error> {
-    let db_json = fs::read_to_string("db.json")?;
-    let db: Database = serde_json::from_str(&db_json)?;
+fn get_db<'a>() -> Result<Database, &'a str> {
+    let Ok(db_json) = fs::read_to_string("db.json") else {
+        return Err("Cannot read db.json")
+    };
+
+    let Ok(db) = serde_json::from_str(&db_json) else {
+        return Err("Cannot parse json into struct")
+    };
+
     Ok(db)
 }
 
-fn write_db(db: &Database) -> Result<&str, std::io::Error> {
-    let new_db_json = serde_json::to_string_pretty(db)?;
-    fs::write("db.json", new_db_json)?;
+fn write_db<'a>(db: &Database) -> Result<&'a str, &str> {
+    let Ok(new_db_json) = serde_json::to_string_pretty(db) else {
+        return Err("Cannot convert db to json")
+    };
+
+    let _ = fs::write("db.json", new_db_json);
     Ok("Write db success!")
 }
 
-fn add<'a>(desc: &String) -> Result<&'a str, std::io::Error> {
+fn add<'a>(desc: &String) -> Result<&'a str, &str> {
     if !is_db_exists() {
-        create_db();
+        create_db().unwrap();
     }
 
-    let mut db = get_db()?;
+    let mut db = get_db().unwrap_or_else(|error| {
+        eprintln!("{error}");
+        process::exit(1);
+    });
     let item = Item { done: false, desc: desc.to_owned(), id: db.current_id + 1 };
 
     db.items.push(item);
     db.current_id += 1;
 
-    write_db(&db)?;
+    let _ = write_db(&db);
 
-    Ok("Success")
+    Ok("Add success!")
 }
 
-fn list() -> () {
+fn list<'a>() -> Result<(), &'a str> {
     if !is_db_exists() {
-        create_db();
+        create_db().unwrap();
     }
 
-    let db = get_db().unwrap_or_else(|error| {
-        eprintln!("Issue found: {}", error);
-        process::exit(1);
-    });
+    let db = get_db().unwrap();
 
     for item in db.items {
         let mark = if item.done { "x" } else { " " };
         println!("[{}] {} - {}", mark, item.id, item.desc);
     }
+
+    Ok(())
+}
+
+fn remove(id: &i8) -> Result<&i8, &str> {
+    let mut db = get_db().unwrap();
+
+    if let Some(removed_item_index) = db.items.iter().position(|item| &item.id == id) {
+        db.items.remove(removed_item_index);
+    };
+
+    println!("Remove item with id {} success!", id);
+
+    Ok(id)
+}
+
+fn done(id: &i8) -> Result<(), &str> {
+
+    Ok(())
 }
 
 fn main() {
@@ -110,21 +137,30 @@ fn main() {
 
     match &cli.command {
         Command::Add { description } => {
-            let message = add(description).unwrap_or_else(|err| {
-                eprintln!("Error found: {err}");
+            let message = add(description).unwrap_or_else(|error| {
+                eprintln!("Error found: {error}");
                 process::exit(1);
             });
             println!("{}", message);
             ()
         },
         Command::Remove { id } => {
-            println!("remove");
+            remove(id).unwrap_or_else(|error| {
+                eprintln!("Error found: {error}");
+                process::exit(1);
+            });
         },
         Command::Done { id } => {
-            println!("done");
+            done(id).unwrap_or_else(|error| {
+                eprintln!("Error found: {error}");
+                process::exit(1);
+            });
         },
         Command::List => {
-            list();
+            let _ = list().unwrap_or_else(|error| {
+                eprintln!("Error found: {error}");
+                process::exit(1);
+            });
         }
     };
 }
