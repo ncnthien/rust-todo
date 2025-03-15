@@ -45,9 +45,9 @@ fn is_db_exists() -> bool {
     Path::new("db.json").exists()
 }
 
-fn create_db<'a>() -> Result<(), &'a str> {
+fn create_db() -> Result<(), String> {
     let Ok(mut file) = fs::File::create("db.json") else {
-        return Err("Cannot create db.json file")
+        return Err("Cannot create db.json file".to_string())
     };
 
     let db = json!({
@@ -60,30 +60,30 @@ fn create_db<'a>() -> Result<(), &'a str> {
     Ok(())
 }
 
-fn get_db<'a>() -> Result<Database, &'a str> {
+fn get_db() -> Result<Database, String> {
     let Ok(db_json) = fs::read_to_string("db.json") else {
-        return Err("Cannot read db.json")
+        return Err("Cannot read db.json".to_string())
     };
 
     let Ok(db) = serde_json::from_str(&db_json) else {
-        return Err("Cannot parse json into struct")
+        return Err("Cannot parse json into struct".to_string())
     };
 
     Ok(db)
 }
 
-fn write_db<'a>(db: &Database) -> Result<&'a str, &str> {
+fn write_db(db: &Database) -> Result<&str, String> {
     let Ok(new_db_json) = serde_json::to_string_pretty(db) else {
-        return Err("Cannot convert db to json")
+        return Err("Cannot convert db to json".to_string())
     };
 
     let _ = fs::write("db.json", new_db_json);
     Ok("Write db success!")
 }
 
-fn add<'a>(desc: &String) -> Result<&'a str, &str> {
+fn add(desc: &String) -> Result<&str, String> {
     if !is_db_exists() {
-        create_db().unwrap();
+        create_db()?;
     }
 
     let mut db = get_db().unwrap_or_else(|error| {
@@ -95,17 +95,17 @@ fn add<'a>(desc: &String) -> Result<&'a str, &str> {
     db.items.push(item);
     db.current_id += 1;
 
-    let _ = write_db(&db);
+    write_db(&db)?;
 
-    Ok("Add success!")
+    Ok(desc.as_str())
 }
 
-fn list<'a>() -> Result<(), &'a str> {
+fn list() -> Result<(), String> {
     if !is_db_exists() {
-        create_db().unwrap();
+        create_db()?;
     }
 
-    let db = get_db().unwrap();
+    let db = get_db()?;
 
     for item in db.items {
         let mark = if item.done { "x" } else { " " };
@@ -115,21 +115,31 @@ fn list<'a>() -> Result<(), &'a str> {
     Ok(())
 }
 
-fn remove(id: &i8) -> Result<&i8, &str> {
-    let mut db = get_db().unwrap();
+fn remove(id: &i8) -> Result<&i8, String> {
+    let mut db = get_db()?;
 
     if let Some(removed_item_index) = db.items.iter().position(|item| &item.id == id) {
         db.items.remove(removed_item_index);
     };
-
-    println!("Remove item with id {} success!", id);
+    write_db(&db)?;
 
     Ok(id)
 }
 
-fn done(id: &i8) -> Result<(), &str> {
+fn done(id: &i8) -> Result<(&i8, bool), String> {
+    let mut db = get_db()?;
 
-    Ok(())
+    let Some(done_item_index) = db.items.iter().position(|item| {
+        &item.id == id
+    }) else {
+        return Err(format!("Item with id {} is not found", id))
+    };
+
+    let new_done = !db.items[done_item_index].done;
+    db.items[done_item_index].done = new_done;
+    write_db(&db)?;
+
+    Ok((id, new_done))
 }
 
 fn main() {
@@ -137,24 +147,26 @@ fn main() {
 
     match &cli.command {
         Command::Add { description } => {
-            let message = add(description).unwrap_or_else(|error| {
+            let added_desc = add(description).unwrap_or_else(|error| {
                 eprintln!("Error found: {error}");
                 process::exit(1);
             });
-            println!("{}", message);
-            ()
+            println!("Added '{}'", added_desc);
         },
         Command::Remove { id } => {
-            remove(id).unwrap_or_else(|error| {
+            let removed = remove(id).unwrap_or_else(|error| {
                 eprintln!("Error found: {error}");
                 process::exit(1);
             });
+            println!("Removed item with id {}", removed);
         },
         Command::Done { id } => {
-            done(id).unwrap_or_else(|error| {
+            let (id, new_done) = done(id).unwrap_or_else(|error| {
                 eprintln!("Error found: {error}");
                 process::exit(1);
             });
+            let status = if new_done { "completed" } else { "uncompleted" };
+            println!("Mark item with id {} to {}", id, status);
         },
         Command::List => {
             let _ = list().unwrap_or_else(|error| {
