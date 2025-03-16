@@ -6,6 +6,11 @@ use std::io::Write;
 use serde_json::json;
 use std::path::Path;
 
+mod database;
+mod repository;
+mod entitiy;
+mod usecase;
+
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 struct Cli {
@@ -25,20 +30,6 @@ enum Command {
         id: i8
     },
     List
-}
-
-
-#[derive(Serialize, Deserialize)]
-struct Item {
-    id: i8,
-    done: bool,
-    desc: String
-}
-
-#[derive(Serialize, Deserialize)]
-struct Database {
-    current_id: i8,
-    items: Vec<Item>
 }
 
 fn is_db_exists() -> bool {
